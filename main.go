@@ -25,19 +25,16 @@ type Result struct {
 	CurrentDiff     Diff
 }
 
-type Instance struct {
+type PCP struct {
+	Dominos      []Domino
 	SavedResult  []Result
 	SavedDominos []Domino
-}
-
-type PCP struct {
-	Dominos []Domino
 }
 
 var count int
 
 func main() {
-	pcp := PCP{}
+	var pcp PCP
 
 	// read input
 	//scanner := bufio.NewScanner(os.Stdin)
@@ -51,12 +48,10 @@ func main() {
 	scanner := bufio.NewScanner(file)
 	for scanner.Scan() {
 		text := scanner.Text()
-		var process Instance
 		if count == 0 {
 			updateCount(text)
-			pcp.Dominos = []Domino{}
-			process := Instance{}
-			process.SavedDominos = pcp.Dominos
+			pcp = PCP{}
+			pcp.SavedDominos = pcp.Dominos
 		} else {
 			stringSlices := strings.Split(text, " ")
 			if stringSlices[0] != stringSlices[1] {
@@ -68,11 +63,11 @@ func main() {
 				if pcp.isUnsovable() {
 					fmt.Println("IMPOSSIBLE")
 				} else {
-					process.SavedDominos = pcp.Dominos
-					if retInst, err := pcp.recursiveSolve(process); err != nil {
+					pcp.SavedDominos = pcp.Dominos
+					if err := pcp.recursiveSolve(); err != nil {
 						fmt.Println("err:", err)
 					} else {
-						fmt.Println(retInst.GetResult())
+						fmt.Println(pcp.GetResult())
 					}
 				}
 			}
@@ -80,35 +75,31 @@ func main() {
 	}
 }
 
-func (p *PCP) recursiveSolve(cur Instance) (Instance, error) {
-	if cur.isCyclicResult() {
-		return cur, errors.New(" Cyclic Result .....")
-	}
-
-	if cur.isResultReach() {
-		return cur, nil
+func (p *PCP) recursiveSolve() error {
+	if p.isResultReach() {
+		return nil
 	}
 
 	for index, dom := range p.Dominos {
-		if p.IsDominoValid(cur, dom) {
-			cur, _ = p.ApplyDomino(cur, index)
+		if p.IsDominoValid(dom) {
+			p.ApplyDomino(index)
 			var err error
-			if len(cur.GetString(0)) > 100 {
-				return cur, errors.New("Too long")
+			if len(p.GetString(0)) > 100 {
+				return errors.New("Too long")
 			}
-			cur, err = p.recursiveSolve(cur)
+			err = p.recursiveSolve()
 			if err == nil {
-				return cur, nil
+				return nil
 			}
 
 		}
 	}
-	return cur, errors.New("Don't have result")
+	return errors.New("Don't have result")
 }
 
-func (p *PCP) IsDominoValid(curState Instance, inputDomino Domino) bool {
-	strTop := curState.GetString(0)
-	strBottom := curState.GetString(1)
+func (p *PCP) IsDominoValid(inputDomino Domino) bool {
+	strTop := p.GetString(0)
+	strBottom := p.GetString(1)
 
 	tempA := strTop + inputDomino.top
 	tempB := strBottom + inputDomino.bottom
@@ -121,26 +112,26 @@ func (p *PCP) IsDominoValid(curState Instance, inputDomino Domino) bool {
 	return tempA == prefix || tempB == prefix
 }
 
-func (p *PCP) ApplyDomino(curState Instance, dominoIndex int) (Instance, error) {
+func (p *PCP) ApplyDomino(dominoIndex int) error {
 	newDom := p.Dominos[dominoIndex]
 
-	if p.IsDominoValid(curState, newDom) {
+	if p.IsDominoValid(newDom) {
 		newRet := Result{}
 		newRet.PotentialResult = dominoIndex
-		if newDiff, err := p.CheckDiff(curState, newDom); err == nil {
+		if newDiff, err := p.CheckDiff(newDom); err == nil {
 			newRet.CurrentDiff = newDiff
-			curState.SavedResult = append(curState.SavedResult, newRet)
-			return curState, nil
+			p.SavedResult = append(p.SavedResult, newRet)
+			return nil
 		}
 
-		return Instance{}, errors.New("Diff error on apply Domino")
+		return errors.New("Diff error on apply Domino")
 	}
-	return Instance{}, errors.New("Domino not valid in apply Domino")
+	return errors.New("Domino not valid in apply Domino")
 }
 
-func (p *PCP) CheckDiff(curState Instance, dom Domino) (Diff, error) {
-	strTop := curState.GetString(0) + dom.top
-	strBottom := curState.GetString(1) + dom.bottom
+func (p *PCP) CheckDiff(dom Domino) (Diff, error) {
+	strTop := p.GetString(0) + dom.top
+	strBottom := p.GetString(1) + dom.bottom
 	retDiff := Diff{}
 	retDiff.DiffCompare = strings.Compare(strTop, strBottom)
 
@@ -209,45 +200,43 @@ func getSubsetPrefix(str1, str2 string) (string, bool) {
 	return str1, findSubset
 }
 
-// Instance
-
-func (c *Instance) GetResult() string {
+func (p *PCP) GetResult() string {
 	var finalResult string
 
-	for _, result := range c.SavedResult {
-		finalResult += c.SavedDominos[result.PotentialResult].top
+	for _, result := range p.SavedResult {
+		finalResult += p.SavedDominos[result.PotentialResult].top
 	}
 	return finalResult
 }
 
-func (c *Instance) GetString(index int) string {
+func (p *PCP) GetString(index int) string {
 	var dominosString string
 
-	for _, result := range c.SavedResult {
+	for _, result := range p.SavedResult {
 		if index == 0 {
-			dominosString += c.SavedDominos[result.PotentialResult].top
+			dominosString += p.SavedDominos[result.PotentialResult].top
 		} else {
-			dominosString += c.SavedDominos[result.PotentialResult].bottom
+			dominosString += p.SavedDominos[result.PotentialResult].bottom
 		}
 	}
 	return dominosString
 }
 
-func (c *Instance) isResultReach() bool {
-	if len(c.GetString(0)) == 0 && len(c.GetString(1)) == 0 {
+func (p *PCP) isResultReach() bool {
+	if len(p.GetString(0)) == 0 && len(p.GetString(1)) == 0 {
 		return false
 	}
-	return c.GetString(0) == c.GetString(1)
+	return p.GetString(0) == p.GetString(1)
 }
 
-func (c *Instance) isCyclicResult() bool {
-	if len(c.SavedResult) == 0 {
+func (p *PCP) isCyclicResult() bool {
+	if len(p.SavedResult) == 0 {
 		return false
 	}
 
-	checkingRet := c.SavedResult[len(c.SavedResult)-1]
-	for i := 0; i < len(c.SavedResult)-1; i++ {
-		ret := c.SavedResult[i]
+	checkingRet := p.SavedResult[len(p.SavedResult)-1]
+	for i := 0; i < len(p.SavedResult)-1; i++ {
+		ret := p.SavedResult[i]
 		//Find save result list has the same
 		if ret.PotentialResult == checkingRet.PotentialResult && ret.CurrentDiff == checkingRet.CurrentDiff {
 			return true
@@ -256,10 +245,10 @@ func (c *Instance) isCyclicResult() bool {
 	return false
 }
 
-func (c *Instance) GetCurrentResult() []int {
+func (p *PCP) GetCurrentResult() []int {
 	var retInt []int
-	for i := 0; i < len(c.SavedResult); i++ {
-		retInt = append(retInt, c.SavedResult[i].PotentialResult)
+	for i := 0; i < len(p.SavedResult); i++ {
+		retInt = append(retInt, p.SavedResult[i].PotentialResult)
 	}
 	return retInt
 }
