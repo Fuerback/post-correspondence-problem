@@ -32,6 +32,9 @@ type PCP struct {
 }
 
 var count int
+var numCase int
+
+const impossible = "IMPOSSIBLE"
 
 func main() {
 	var pcp PCP
@@ -49,9 +52,8 @@ func main() {
 	for scanner.Scan() {
 		text := scanner.Text()
 		if count == 0 {
-			updateCount(text)
+			setupNewSequence(text)
 			pcp = PCP{}
-			pcp.SavedDominos = pcp.Dominos
 		} else {
 			stringSlices := strings.Split(text, " ")
 			if stringSlices[0] != stringSlices[1] {
@@ -61,18 +63,27 @@ func main() {
 			count--
 			if count == 0 {
 				if pcp.isUnsovable() {
-					fmt.Println("IMPOSSIBLE")
+					printResult(numCase, impossible)
 				} else {
 					pcp.SavedDominos = pcp.Dominos
 					if err := pcp.recursiveSolve(); err != nil {
 						fmt.Println("err:", err)
 					} else {
-						fmt.Println(pcp.GetResult())
+						printResult(numCase, pcp.GetResult())
 					}
 				}
 			}
 		}
 	}
+}
+
+func setupNewSequence(text string) {
+	numCase++
+	updateCount(text)
+}
+
+func printResult(caseNum int, result string) {
+	fmt.Printf("Case %d: %s\n", numCase, result)
 }
 
 func (p *PCP) recursiveSolve() error {
