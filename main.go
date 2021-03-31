@@ -2,9 +2,7 @@ package main
 
 import (
 	"bufio"
-	"errors"
 	"fmt"
-	"log"
 	"os"
 	"strconv"
 	"strings"
@@ -15,251 +13,289 @@ type Domino struct {
 	bottom string
 }
 
-type Diff struct {
-	DiffCompare int
-	DiffDomino  string
+type Solutions struct {
+	indices  []int
+	dominos  []Domino
+	diff     string
+	diffSide string
 }
-
-type Result struct {
-	PotentialResult int
-	CurrentDiff     Diff
-}
-
-type PCP struct {
-	Dominos      []Domino
-	SavedResult  []Result
-	SavedDominos []Domino
-}
-
-var count int
-var numCase int
-
-const impossible = "IMPOSSIBLE"
 
 func main() {
-	var pcp PCP
+	d := []Domino{}
+	mapDominos := [][]Domino{}
+	var count int
 
-	// read input
-	//scanner := bufio.NewScanner(os.Stdin)
+	scanner := bufio.NewScanner(os.Stdin)
+	// file, err := os.Open("./sample.in")
+	// if err != nil {
+	// 	log.Fatal(err)
+	// }
+	// defer file.Close()
 
-	file, err := os.Open("./sample.in")
-	if err != nil {
-		log.Fatal(err)
-	}
-	defer file.Close()
+	// scanner := bufio.NewScanner(file)
 
-	scanner := bufio.NewScanner(file)
 	for scanner.Scan() {
 		text := scanner.Text()
-		if count == 0 {
-			setupNewSequence(text)
-			pcp = PCP{}
+		n, err := strconv.Atoi(text)
+		if err == nil {
+			count = n
 		} else {
 			stringSlices := strings.Split(text, " ")
 			if stringSlices[0] != stringSlices[1] {
 				domino := Domino{top: stringSlices[0], bottom: stringSlices[1]}
-				pcp.Dominos = append(pcp.Dominos, domino)
+				d = append(d, domino)
 			}
 			count--
+
 			if count == 0 {
-				if pcp.isUnsovable() {
-					printResult(numCase, impossible)
-				} else {
-					pcp.SavedDominos = pcp.Dominos
-					if err := pcp.recursiveSolve(); err != nil {
-						fmt.Println("err:", err)
-					} else {
-						printResult(numCase, pcp.GetResult())
+				mapDominos = append(mapDominos, d)
+				d = []Domino{}
+			}
+		}
+	}
+
+	for index, dominos := range mapDominos {
+		solutions := []Solutions{}
+
+		for i := 0; i < len(dominos); i++ {
+			if len(dominos[i].top) == len(dominos[i].bottom) {
+				if dominos[i].top != dominos[i].bottom {
+					continue
+				}
+			}
+			if len(dominos[i].top) < len(dominos[i].bottom) {
+				if !strings.HasPrefix(dominos[i].bottom, dominos[i].top) {
+					continue
+				}
+			}
+			if len(dominos[i].bottom) < len(dominos[i].top) {
+				if !strings.HasPrefix(dominos[i].top, dominos[i].bottom) {
+					continue
+				}
+			}
+
+			s := NewSolution(dominos, []int{i})
+			solutions = append(solutions, *s)
+		}
+
+		validSolutions := getValidSolutions(solutions)
+
+		depth := 10
+		for i := 0; i < depth; i++ {
+
+			if len(validSolutions) > 0 || len(solutions) == 0 {
+				break
+			}
+
+			newSolutions := []Solutions{}
+
+			for j := 0; j < len(solutions); j++ {
+				if solutions[j].diff == "" {
+					//should never happen to be honest
+					for k := 0; k < len(dominos); k++ {
+						if len(dominos[k].top) == len(dominos[k].bottom) {
+							if dominos[k].top != dominos[k].bottom {
+								continue
+							}
+						}
+						if len(dominos[k].top) < len(dominos[k].bottom) {
+							if !strings.HasPrefix(dominos[k].bottom, dominos[k].top) {
+								continue
+							}
+						}
+						if len(dominos[k].bottom) < len(dominos[k].top) {
+							if !strings.HasPrefix(dominos[k].top, dominos[k].bottom) {
+								continue
+							}
+						}
+
+						NewSolution(dominos, append(solutions[j].indices, k))
+					}
+				}
+
+				if solutions[j].diffSide == "x" {
+					for k := 0; k < len(dominos); k++ {
+						var pref string
+						if len(solutions[j].diff) < len(dominos[k].top) {
+							pref = solutions[j].diff
+						} else {
+							pref = solutions[j].diff[0:len(dominos[k].top)]
+						}
+
+						if strings.HasPrefix(dominos[k].top, pref) {
+							newX := solutions[j].getTop() + dominos[k].top
+							newY := solutions[j].getBottom() + dominos[k].bottom
+							if len(newX) == len(newY) {
+								if newX != newY {
+									continue
+								}
+							}
+							if len(newX) > len(newY) {
+								if !strings.HasPrefix(newX, newY) {
+									continue
+								}
+							}
+							if len(newY) > len(newX) {
+								if !strings.HasPrefix(newY, newX) {
+									continue
+								}
+							}
+
+							oldIndices := []int{}
+							for p := 0; p < len(solutions[j].indices); p++ {
+								oldIndices = append(oldIndices, solutions[j].indices[p])
+							}
+							oldIndices = append(oldIndices, k)
+							s := NewSolution(dominos, oldIndices)
+							newSolutions = append(newSolutions, *s)
+						}
+					}
+				}
+
+				if solutions[j].diffSide == "y" {
+					for k := 0; k < len(dominos); k++ {
+						var pref string
+						if len(solutions[j].diff) < len(dominos[k].bottom) {
+							pref = solutions[j].diff
+						} else {
+							pref = solutions[j].diff[0:len(dominos[k].bottom)]
+						}
+						if strings.HasPrefix(dominos[k].bottom, pref) {
+							newX := solutions[j].getTop() + dominos[k].top
+							newY := solutions[j].getBottom() + dominos[k].bottom
+
+							if len(newX) == len(newY) {
+								if newX != newY {
+									continue
+								}
+							}
+							if len(newX) > len(newY) {
+								if !strings.HasPrefix(newX, newY) {
+									continue
+								}
+							}
+							if len(newY) > len(newX) {
+								if !strings.HasPrefix(newY, newX) {
+									continue
+								}
+							}
+
+							oldIndices := []int{}
+							for p := 0; p < len(solutions[j].indices); p++ {
+								oldIndices = append(oldIndices, solutions[j].indices[p])
+							}
+							oldIndices = append(oldIndices, k)
+							s := NewSolution(dominos, oldIndices)
+							newSolutions = append(newSolutions, *s)
+						}
 					}
 				}
 			}
-		}
-	}
-}
+			validSolutions = getValidSolutions(newSolutions)
 
-func setupNewSequence(text string) {
-	numCase++
-	updateCount(text)
-}
-
-func printResult(caseNum int, result string) {
-	fmt.Printf("Case %d: %s\n", numCase, result)
-}
-
-func (p *PCP) recursiveSolve() error {
-	if p.isResultReach() {
-		return nil
-	}
-
-	for index, dom := range p.Dominos {
-		if p.IsDominoValid(dom) {
-			p.ApplyDomino(index)
-			var err error
-			if len(p.GetString(0)) > 100 {
-				return errors.New("Too long")
-			}
-			err = p.recursiveSolve()
-			if err == nil {
-				return nil
-			}
-
-		}
-	}
-	return errors.New("Don't have result")
-}
-
-func (p *PCP) IsDominoValid(inputDomino Domino) bool {
-	strTop := p.GetString(0)
-	strBottom := p.GetString(1)
-
-	tempA := strTop + inputDomino.top
-	tempB := strBottom + inputDomino.bottom
-
-	prefix, exist := getSubsetPrefix(tempA, tempB)
-	if !exist {
-		return false
-	}
-
-	return tempA == prefix || tempB == prefix
-}
-
-func (p *PCP) ApplyDomino(dominoIndex int) error {
-	newDom := p.Dominos[dominoIndex]
-
-	if p.IsDominoValid(newDom) {
-		newRet := Result{}
-		newRet.PotentialResult = dominoIndex
-		if newDiff, err := p.CheckDiff(newDom); err == nil {
-			newRet.CurrentDiff = newDiff
-			p.SavedResult = append(p.SavedResult, newRet)
-			return nil
+			solutions = newSolutions
 		}
 
-		return errors.New("Diff error on apply Domino")
-	}
-	return errors.New("Domino not valid in apply Domino")
-}
-
-func (p *PCP) CheckDiff(dom Domino) (Diff, error) {
-	strTop := p.GetString(0) + dom.top
-	strBottom := p.GetString(1) + dom.bottom
-	retDiff := Diff{}
-	retDiff.DiffCompare = strings.Compare(strTop, strBottom)
-
-	if retDiff.DiffCompare == 0 {
-		return retDiff, nil
-	}
-
-	if retDiff.DiffCompare == 1 {
-		retDiff.DiffDomino = strings.TrimPrefix(strTop, strBottom)
-	} else {
-		retDiff.DiffDomino = strings.TrimPrefix(strBottom, strTop)
-	}
-
-	return retDiff, nil
-}
-
-func updateCount(text string) {
-	n, err := strconv.Atoi(text)
-	if err != nil {
-		fmt.Println("count not updated")
-	}
-	count = n
-}
-
-func (p *PCP) isUnsovable() bool {
-	var hasTopLongerThanBottom bool
-	var hasBottomLongerThanTop bool
-
-	for _, domino := range p.Dominos {
-		if len(domino.top) > len(domino.bottom) {
-			hasTopLongerThanBottom = true
-			break
-		}
-	}
-
-	for _, domino := range p.Dominos {
-		if len(domino.bottom) > len(domino.top) {
-			hasBottomLongerThanTop = true
-			break
-		}
-	}
-
-	if hasTopLongerThanBottom && hasBottomLongerThanTop {
-		return false
-	}
-
-	return true
-}
-
-func getSubsetPrefix(str1, str2 string) (string, bool) {
-	findSubset := false
-	for i := 0; i < len(str1) && i < len(str2); i++ {
-		if str1[i] != str2[i] {
-			retStr := str1[:i]
-			return retStr, findSubset
-		}
-		findSubset = true
-	}
-
-	if len(str1) > len(str2) {
-		return str2, findSubset
-	} else if len(str1) == len(str2) {
-		return str1, str1 == str2
-	}
-
-	return str1, findSubset
-}
-
-func (p *PCP) GetResult() string {
-	var finalResult string
-
-	for _, result := range p.SavedResult {
-		finalResult += p.SavedDominos[result.PotentialResult].top
-	}
-	return finalResult
-}
-
-func (p *PCP) GetString(index int) string {
-	var dominosString string
-
-	for _, result := range p.SavedResult {
-		if index == 0 {
-			dominosString += p.SavedDominos[result.PotentialResult].top
+		if len(validSolutions) == 0 {
+			fmt.Printf("Case %d: %s\n", index+1, "IMPOSSIBLE")
 		} else {
-			dominosString += p.SavedDominos[result.PotentialResult].bottom
+			fmt.Printf("Case %d: %s\n", index+1, getResult(validSolutions))
 		}
 	}
-	return dominosString
 }
 
-func (p *PCP) isResultReach() bool {
-	if len(p.GetString(0)) == 0 && len(p.GetString(1)) == 0 {
-		return false
-	}
-	return p.GetString(0) == p.GetString(1)
-}
+func getResult(s []Solutions) string {
+	var finalSolution string
 
-func (p *PCP) isCyclicResult() bool {
-	if len(p.SavedResult) == 0 {
-		return false
-	}
-
-	checkingRet := p.SavedResult[len(p.SavedResult)-1]
-	for i := 0; i < len(p.SavedResult)-1; i++ {
-		ret := p.SavedResult[i]
-		//Find save result list has the same
-		if ret.PotentialResult == checkingRet.PotentialResult && ret.CurrentDiff == checkingRet.CurrentDiff {
-			return true
+	for _, result := range s {
+		if len(finalSolution) == 0 || len(result.getTop()) < len(finalSolution) {
+			finalSolution = result.getTop()
+		}
+		if len(finalSolution) > 0 && len(result.getTop()) == len(finalSolution) && strings.Compare(result.getTop(), finalSolution) < 0 {
+			finalSolution = result.getTop()
 		}
 	}
-	return false
+
+	return finalSolution
 }
 
-func (p *PCP) GetCurrentResult() []int {
-	var retInt []int
-	for i := 0; i < len(p.SavedResult); i++ {
-		retInt = append(retInt, p.SavedResult[i].PotentialResult)
+func getValidSolutions(s []Solutions) []Solutions {
+	validSolutions := []Solutions{}
+	for i := 0; i < len(s); i++ {
+		if s[i].isValidSolution() {
+			validSolutions = append(validSolutions, s[i])
+		}
 	}
-	return retInt
+	return validSolutions
+}
+
+func NewSolution(d []Domino, i []int) *Solutions {
+	s := &Solutions{
+		dominos: d,
+		indices: i,
+	}
+	s.updateDiffs()
+	return s
+}
+
+func (s *Solutions) addIndice(i int) {
+	s.indices = append(s.indices, i)
+	s.updateDiffs()
+}
+
+func (s *Solutions) updateDiffs() {
+	var x = ""
+	var y = ""
+
+	for i := 0; i < len(s.indices); i++ {
+		x += s.dominos[s.indices[i]].top
+		y += s.dominos[s.indices[i]].bottom
+	}
+
+	if len(x) > len(y) {
+		s.diffSide = "y"
+		lenY := len(y)
+		lenX := len(x)
+		s.diff = x[lenY:lenX]
+	} else if len(x) < len(y) {
+		s.diffSide = "x"
+		lenY := len(y)
+		lenX := len(x)
+		s.diff = y[lenX:lenY]
+	} else {
+		s.diffSide = ""
+		s.diff = ""
+	}
+}
+
+func (s *Solutions) isValidSolution() bool {
+	var x = ""
+	var y = ""
+
+	for i := 0; i < len(s.indices); i++ {
+		x += s.dominos[s.indices[i]].top
+		y += s.dominos[s.indices[i]].bottom
+	}
+
+	return len(x) == len(y)
+}
+
+func (s *Solutions) getTop() string {
+	var x = ""
+
+	for i := 0; i < len(s.indices); i++ {
+		x += s.dominos[s.indices[i]].top
+	}
+
+	return x
+}
+
+func (s *Solutions) getBottom() string {
+	var y = ""
+
+	for i := 0; i < len(s.indices); i++ {
+		y += s.dominos[s.indices[i]].bottom
+	}
+
+	return y
 }
